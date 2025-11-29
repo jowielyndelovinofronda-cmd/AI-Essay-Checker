@@ -63,19 +63,34 @@ def ocr_pdf(pdf_file):
 # -----------------------------
 # Streamlit App Config
 # -----------------------------
-st.set_page_config(page_title="AI Essay Checker + Scanner", page_icon="📘", layout="wide")
+st.set_page_config(
+    page_title="AI Essay Checker + Scanner",
+    page_icon="📘",
+    layout="wide"
+)
 
 # -----------------------------
 # App Header
 # -----------------------------
-st.markdown('<h1 style="text-align:center; color:#003366;">📘 AI Essay Evaluation System</h1>', unsafe_allow_html=True)
-st.markdown('<h3 style="text-align:center; color:#444;">Grammar • Spelling • Vocabulary • Coherence • Structure</h3>', unsafe_allow_html=True)
+st.markdown("""
+<style>
+.main-title { font-size:42px; font-weight:700; color:#003366; text-align:center; margin-bottom:-10px;}
+.subtitle { font-size:20px; color:#444; text-align:center; margin-bottom:30px;}
+.score-box { padding:15px; border-radius:10px; background:#eef2ff; text-align:center; font-size:22px; font-weight:600; margin:10px;}
+.corrected-essay { background-color:#e6f7ff; padding:10px; border-radius:5px; white-space:pre-wrap; }
+.summary-box { background-color:#fff4e6; padding:10px; border-radius:5px; margin-top:10px; }
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown('<div class="main-title">📘 AI Essay Evaluation System</div>', unsafe_allow_html=True)
+st.markdown('<div class="subtitle">Grammar • Spelling • Vocabulary • Coherence • Structure</div>', unsafe_allow_html=True)
 st.write("___")
 
 # -----------------------------
-# Input Mode Selection
+# Input Mode
 # -----------------------------
 mode = st.radio("Choose Input Method:", ["📄 Paste Text", "📷 Upload Image", "📑 Upload PDF / Scan"])
+
 essay_text = ""
 
 if mode == "📄 Paste Text":
@@ -127,6 +142,7 @@ if st.button("🔍 Evaluate Essay"):
                 "coherence": 1-10,
                 "structure": 1-10,
                 "corrected_essay": "corrected essay version",
+                "summary": "short summary analysis",
                 "explanations": "sentence-by-sentence explanation"
             }}
 
@@ -154,13 +170,13 @@ if st.button("🔍 Evaluate Essay"):
                 col3.markdown(f"<div class='score-box'>Coherence<br>{data['coherence']}/10</div>", unsafe_allow_html=True)
                 col4.markdown(f"<div class='score-box'>Structure<br>{data['structure']}/10</div>", unsafe_allow_html=True)
 
-                st.write("---")
+                # --- Summary Analysis ---
+                st.subheader("📝 Summary Analysis")
+                st.markdown(f"<div class='summary-box'>{data.get('summary', 'No summary available')}</div>", unsafe_allow_html=True)
 
-                # --- Corrected Essay ---
+                # --- Corrected Essay with Highlight ---
                 st.subheader("✔ Corrected Essay")
-                st.write(data["corrected_essay"])
-
-                st.write("---")
+                st.markdown(f"<div class='corrected-essay'>{data['corrected_essay']}</div>", unsafe_allow_html=True)
 
                 # --- Teaching Mode ---
                 st.subheader("📘 Teaching Mode – Explanation")
@@ -185,19 +201,20 @@ if st.button("🔍 Evaluate Essay"):
                 st.pyplot(fig)
 
                 # --- PDF Download ---
-                st.subheader("📄 Download Corrected Essay & Scores as PDF")
-                pdf = FPDF(orientation='P', unit='mm', format='A4')
+                st.subheader("📄 Download Corrected Essay & Summary as PDF")
+                pdf = FPDF()
                 pdf.add_page()
                 pdf.set_font("Arial", "B", 16)
                 pdf.cell(0, 10, "AI Essay Evaluation Report", ln=True, align="C")
                 pdf.ln(10)
                 pdf.set_font("Arial", "", 12)
-                pdf.multi_cell(0, 8, f"Original Essay:\n{essay_text}\n", align="L")
-                pdf.multi_cell(0, 8, f"Corrected Essay:\n{data['corrected_essay']}\n", align="L")
-                pdf.multi_cell(0, 8, f"Scores:\nGrammar: {data['grammar']}/10\nVocabulary: {data['vocabulary']}/10\nCoherence: {data['coherence']}/10\nStructure: {data['structure']}/10\nOverall: {overall}/10\n", align="L")
-                pdf.multi_cell(0, 8, f"Teaching Mode Explanation:\n{data['explanations']}\n", align="L")
+                pdf.multi_cell(0, 8, f"Original Essay:\n{essay_text}\n")
+                pdf.multi_cell(0, 8, f"Corrected Essay:\n{data['corrected_essay']}\n")
+                pdf.multi_cell(0, 8, f"Summary Analysis:\n{data.get('summary', 'No summary available')}\n")
+                pdf.multi_cell(0, 8, f"Scores:\nGrammar: {data['grammar']}/10\nVocabulary: {data['vocabulary']}/10\nCoherence: {data['coherence']}/10\nStructure: {data['structure']}/10\nOverall: {overall}/10\n")
+                pdf.multi_cell(0, 8, f"Teaching Mode Explanation:\n{data['explanations']}\n")
                 pdf_file_name = "Essay_Evaluation_Report.pdf"
-                pdf.output(pdf_file_name, 'F')
+                pdf.output(pdf_file_name, "F")
 
                 with open(pdf_file_name, "rb") as f:
                     st.download_button("⬇️ Download PDF", f, file_name=pdf_file_name)
