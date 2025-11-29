@@ -66,29 +66,6 @@ def ocr_pdf(pdf_file):
 st.set_page_config(page_title="AI Essay Checker + Scanner", page_icon="📘", layout="wide")
 
 # -----------------------------
-# Theme Toggle
-# -----------------------------
-theme_mode = st.radio("Choose Theme:", ["Light", "Dark"])
-if theme_mode == "Dark":
-    st.markdown(
-        """
-        <style>
-        body { background-color: #111; color: #eee; }
-        .score-box { background:#333; color:#fff; }
-        </style>
-        """, unsafe_allow_html=True
-    )
-else:
-    st.markdown(
-        """
-        <style>
-        body { background-color: #fff; color: #000; }
-        .score-box { background:#eef2ff; color:#000; }
-        </style>
-        """, unsafe_allow_html=True
-    )
-
-# -----------------------------
 # App Header
 # -----------------------------
 st.markdown('<h1 style="text-align:center; color:#003366;">📘 AI Essay Evaluation System</h1>', unsafe_allow_html=True)
