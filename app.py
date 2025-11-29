@@ -66,44 +66,64 @@ def ocr_pdf(pdf_file):
 st.set_page_config(page_title="AI Essay Checker + Scanner", page_icon="📘", layout="wide")
 
 # -----------------------------
-# Custom CSS
+# Theme Toggle
 # -----------------------------
-st.markdown("""
-<style>
-body {background-color: #F7F9F9; color: #1B2631;}
-.main-title { font-size:46px; font-weight:800; color:#1F618D; text-align:center; margin-bottom:-10px;}
-.subtitle { font-size:22px; color:#566573; text-align:center; margin-bottom:25px;}
-.score-box { padding:20px; border-radius:15px; background:linear-gradient(135deg,#85C1E9,#2874A6); 
-             color:white; text-align:center; font-size:24px; font-weight:700; margin:10px;}
-.ai-likelihood-box { padding:15px; border-radius:12px; text-align:center; font-size:20px; font-weight:600; margin:10px; background-color:#D4E6F1; color:#1B2631;}
-</style>
-""", unsafe_allow_html=True)
+theme_mode = st.radio("Choose Theme:", ["Light", "Dark"])
+if theme_mode == "Dark":
+    st.markdown(
+        """
+        <style>
+        body { background-color: #111; color: #eee; }
+        .score-box { background:#333; color:#fff; }
+        </style>
+        """, unsafe_allow_html=True
+    )
+else:
+    st.markdown(
+        """
+        <style>
+        body { background-color: #fff; color: #000; }
+        .score-box { background:#eef2ff; color:#000; }
+        </style>
+        """, unsafe_allow_html=True
+    )
 
-st.markdown('<div class="main-title">📘 AI Essay Evaluation System</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtitle">Grammar • Spelling • Vocabulary • Coherence • Structure</div>', unsafe_allow_html=True)
+# -----------------------------
+# App Header
+# -----------------------------
+st.markdown('<h1 style="text-align:center; color:#003366;">📘 AI Essay Evaluation System</h1>', unsafe_allow_html=True)
+st.markdown('<h3 style="text-align:center; color:#444;">Grammar • Spelling • Vocabulary • Coherence • Structure</h3>', unsafe_allow_html=True)
 st.write("___")
 
 # -----------------------------
-# Sidebar Input
+# Input Mode Selection
 # -----------------------------
-st.sidebar.header("Input Options")
-mode = st.sidebar.radio("Choose Input Method:", ["📄 Paste Text", "📷 Upload Image", "📑 Upload PDF / Scan"])
+mode = st.radio("Choose Input Method:", ["📄 Paste Text", "📷 Upload Image", "📑 Upload PDF / Scan"])
 essay_text = ""
 
 if mode == "📄 Paste Text":
-    essay_text = st.sidebar.text_area("Paste or type your essay:", height=200)
+    st.subheader("📝 Enter Your Essay")
+    essay_text = st.text_area("Paste or type your essay below:", height=250)
+
 elif mode == "📷 Upload Image":
-    uploaded_image = st.sidebar.file_uploader("Upload image (PNG, JPG, JPEG)", type=["png","jpg","jpeg"])
-    camera_image = st.sidebar.camera_input("Or take a photo")
+    st.subheader("📷 Upload or Take a Photo of Your Essay")
+    uploaded_image = st.file_uploader("Upload image (PNG, JPG, JPEG)", type=["png","jpg","jpeg"])
+    camera_image = st.camera_input("Or take a photo")
     img_source = uploaded_image if uploaded_image else camera_image
     if img_source:
         with st.spinner("Extracting text from image..."):
             essay_text = ocr_image(img_source)
-elif mode == "📑 Upload PDF / Scan":
-    uploaded_pdf = st.sidebar.file_uploader("Upload PDF", type=["pdf"])
+        st.subheader("📄 Extracted Text")
+        st.write(essay_text)
+
+else:
+    st.subheader("📑 Upload PDF / Scanned Essay")
+    uploaded_pdf = st.file_uploader("Upload PDF", type=["pdf"])
     if uploaded_pdf:
         with st.spinner("Extracting text from PDF..."):
             essay_text = ocr_pdf(uploaded_pdf)
+        st.subheader("📄 Extracted Text")
+        st.write(essay_text)
 
 # -----------------------------
 # Evaluate Button
@@ -130,8 +150,7 @@ if st.button("🔍 Evaluate Essay"):
                 "coherence": 1-10,
                 "structure": 1-10,
                 "corrected_essay": "corrected essay version",
-                "explanations": "sentence-by-sentence explanation",
-                "ai_likelihood": "optional AI-generated content likelihood in percentage"
+                "explanations": "sentence-by-sentence explanation"
             }}
 
             Essay:
@@ -152,19 +171,19 @@ if st.button("🔍 Evaluate Essay"):
             else:
                 # --- Evaluation Scores ---
                 st.subheader("📊 Evaluation Scores")
-                col1, col2, col3, col4, col5 = st.columns([1,1,1,1,1])
+                col1, col2, col3, col4 = st.columns(4)
                 col1.markdown(f"<div class='score-box'>Grammar<br>{data['grammar']}/10</div>", unsafe_allow_html=True)
                 col2.markdown(f"<div class='score-box'>Vocabulary<br>{data['vocabulary']}/10</div>", unsafe_allow_html=True)
                 col3.markdown(f"<div class='score-box'>Coherence<br>{data['coherence']}/10</div>", unsafe_allow_html=True)
                 col4.markdown(f"<div class='score-box'>Structure<br>{data['structure']}/10</div>", unsafe_allow_html=True)
-                if "ai_likelihood" in data:
-                    col5.markdown(f"<div class='ai-likelihood-box'>🤖 AI-Likelihood<br>{data['ai_likelihood']}%</div>", unsafe_allow_html=True)
 
                 st.write("---")
 
                 # --- Corrected Essay ---
                 st.subheader("✔ Corrected Essay")
                 st.write(data["corrected_essay"])
+
+                st.write("---")
 
                 # --- Teaching Mode ---
                 st.subheader("📘 Teaching Mode – Explanation")
@@ -182,8 +201,7 @@ if st.button("🔍 Evaluate Essay"):
 
                 # --- Word Cloud ---
                 st.subheader("☁️ Essay Word Cloud")
-                wordcloud = WordCloud(width=800, height=400, background_color='white',
-                                      colormap="Blues").generate(essay_text)
+                wordcloud = WordCloud(width=800, height=400, background_color='white').generate(essay_text)
                 fig, ax = plt.subplots(figsize=(10,5))
                 ax.imshow(wordcloud, interpolation='bilinear')
                 ax.axis("off")
@@ -191,20 +209,18 @@ if st.button("🔍 Evaluate Essay"):
 
                 # --- PDF Download ---
                 st.subheader("📄 Download Corrected Essay & Scores as PDF")
-                pdf = FPDF()
+                pdf = FPDF(orientation='P', unit='mm', format='A4')
                 pdf.add_page()
                 pdf.set_font("Arial", "B", 16)
                 pdf.cell(0, 10, "AI Essay Evaluation Report", ln=True, align="C")
                 pdf.ln(10)
                 pdf.set_font("Arial", "", 12)
-                pdf.multi_cell(0, 8, f"Original Essay:\n{essay_text}\n".encode('latin-1', 'replace').decode('latin-1'))
-                pdf.multi_cell(0, 8, f"Corrected Essay:\n{data['corrected_essay']}\n".encode('latin-1', 'replace').decode('latin-1'))
-                pdf.multi_cell(0, 8, f"Scores:\nGrammar: {data['grammar']}/10\nVocabulary: {data['vocabulary']}/10\nCoherence: {data['coherence']}/10\nStructure: {data['structure']}/10\nOverall: {overall}/10\n")
-                pdf.multi_cell(0, 8, f"Teaching Mode Explanation:\n{data['explanations']}\n")
-                if "ai_likelihood" in data:
-                    pdf.multi_cell(0, 8, f"AI-Likelihood: {data['ai_likelihood']}%")
+                pdf.multi_cell(0, 8, f"Original Essay:\n{essay_text}\n", align="L")
+                pdf.multi_cell(0, 8, f"Corrected Essay:\n{data['corrected_essay']}\n", align="L")
+                pdf.multi_cell(0, 8, f"Scores:\nGrammar: {data['grammar']}/10\nVocabulary: {data['vocabulary']}/10\nCoherence: {data['coherence']}/10\nStructure: {data['structure']}/10\nOverall: {overall}/10\n", align="L")
+                pdf.multi_cell(0, 8, f"Teaching Mode Explanation:\n{data['explanations']}\n", align="L")
                 pdf_file_name = "Essay_Evaluation_Report.pdf"
-                pdf.output(pdf_file_name)
+                pdf.output(pdf_file_name, 'F')
 
                 with open(pdf_file_name, "rb") as f:
                     st.download_button("⬇️ Download PDF", f, file_name=pdf_file_name)
