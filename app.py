@@ -52,7 +52,7 @@ def ocr_pdf(pdf_file):
         pdf_reader = PyPDF2.PdfReader(pdf_file)
         text = ""
         for page in pdf_reader.pages:
-            text += page.extract_text() + "\n"
+            text += (page.extract_text() or "") + "\n"
         if not text.strip():
             images = convert_from_bytes(pdf_file.read())
             for img in images:
@@ -61,9 +61,9 @@ def ocr_pdf(pdf_file):
     except Exception as e:
         return f"ERROR: {e}"
 
-def sanitize_text(text):
-    # Replace unsupported characters for PDF if needed
-    return text.encode('latin1', errors='replace').decode('latin1')
+def safe_text(text):
+    """Convert text to a latin-1 friendly format by replacing unsupported chars."""
+    return text.encode("latin-1", "replace").decode("latin-1")
 
 # -----------------------------
 # Streamlit App Config
@@ -75,8 +75,8 @@ st.markdown("""
 .main-title { font-size:42px; font-weight:700; color:#003366; text-align:center; margin-bottom:-10px;}
 .subtitle { font-size:20px; color:#444; text-align:center; margin-bottom:30px;}
 .score-box { padding:15px; border-radius:10px; background:#eef2ff; text-align:center; font-size:22px; font-weight:600; margin:10px;}
-.corrected { background-color:#d4edda; padding:5px; border-radius:5px; }
-.summary { background-color:#fff3cd; padding:5px; border-radius:5px; }
+.corrected { background-color:#d4edda; padding:10px; border-radius:5px; }
+.summary { background-color:#fff3cd; padding:10px; border-radius:5px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -93,6 +93,7 @@ essay_text = ""
 if mode == "📄 Paste Text":
     st.subheader("📝 Enter Your Essay")
     essay_text = st.text_area("Paste or type your essay below:", height=250)
+
 elif mode == "📷 Upload Image":
     st.subheader("📷 Upload or Take a Photo of Your Essay")
     uploaded_image = st.file_uploader("Upload image (PNG, JPG, JPEG)", type=["png","jpg","jpeg"])
@@ -103,6 +104,7 @@ elif mode == "📷 Upload Image":
             essay_text = ocr_image(img_source)
         st.subheader("📄 Extracted Text")
         st.write(essay_text)
+
 else:
     st.subheader("📑 Upload PDF / Scanned Essay")
     uploaded_pdf = st.file_uploader("Upload PDF", type=["pdf"])
@@ -188,11 +190,16 @@ if st.button("🔍 Evaluate Essay"):
 
                 # --- Overall Score ---
                 try:
-                    scores = [int(data['grammar']), int(data['vocabulary']),
-                              int(data['coherence']), int(data['structure'])]
-                    overall = sum(scores)/len(scores)
+                    scores = [
+                        int(data['grammar']),
+                        int(data['vocabulary']),
+                        int(data['coherence']),
+                        int(data['structure'])
+                    ]
+                    overall = sum(scores)/4
                 except:
                     overall = "N/A"
+
                 st.subheader("🏆 Overall Score")
                 st.metric("Overall Score (out of 10)", overall)
 
@@ -204,43 +211,72 @@ if st.button("🔍 Evaluate Essay"):
                 ax.axis("off")
                 st.pyplot(fig)
 
-                # --- PDF Download ---
+                # -------------------------
+                # PDF DOWNLOAD (FIXED)
+                # -------------------------
                 st.subheader("📄 Download Corrected Essay & Summary")
-                pdf_file_name = "Essay_Evaluation_Report.pdf"
+
                 pdf = FPDF()
                 pdf.add_page()
-                pdf.add_font('ArialUnicode', '', 'arial.ttf', uni=True)
-                pdf.set_font("ArialUnicode", "", 12)
-                pdf.multi_cell(0, 8, f"Original Essay:\n{essay_text}\n")
-                pdf.multi_cell(0, 8, f"Corrected Essay:\n{data['corrected_essay']}\n")
-                pdf.multi_cell(0, 8, f"Summary Analysis:\n{data.get('summary','No summary')}\n")
-                pdf.multi_cell(0, 8, f"Scores:\nGrammar: {data['grammar']}/10\nVocabulary: {data['vocabulary']}/10\nCoherence: {data['coherence']}/10\nStructure: {data['structure']}/10\nOverall: {overall}/10\n")
-                pdf_file_path = pdf_file_name
-                pdf.output(pdf_file_path)
-                with open(pdf_file_path, "rb") as f:
+                pdf.set_font("Helvetica", size=12)
+
+                pdf.multi_cell(0, 8, safe_text("Original Essay:\n" + essay_text + "\n"))
+                pdf.multi_cell(0, 8, safe_text("Corrected Essay:\n" + data['corrected_essay'] + "\n"))
+                pdf.multi_cell(0, 8, safe_text("Summary Analysis:\n" + data.get('summary', 'No summary') + "\n"))
+
+                pdf.multi_cell(0, 8, safe_text(
+                    f"Scores:\n"
+                    f"Grammar: {data['grammar']}/10\n"
+                    f"Vocabulary: {data['vocabulary']}/10\n"
+                    f"Coherence: {data['coherence']}/10\n"
+                    f"Structure: {data['structure']}/10\n"
+                    f"Overall: {overall}/10\n"
+                ))
+
+                pdf_file_name = "Essay_Evaluation_Report.pdf"
+                pdf.output(pdf_file_name)
+
+                with open(pdf_file_name, "rb") as f:
                     st.download_button("⬇️ Download PDF", f, file_name=pdf_file_name)
 
-                # --- Word Document Option ---
-                doc_file_name = "Essay_Evaluation_Report.docx"
+                # -------------------------
+                # DOCX DOWNLOAD
+                # -------------------------
+                doc_name = "Essay_Evaluation_Report.docx"
                 doc = Document()
                 doc.add_heading("AI Essay Evaluation Report", 0)
-                doc.add_heading("Original Essay", level=1)
-                doc.add_paragraph(essay_text)
-                doc.add_heading("Corrected Essay", level=1)
-                doc.add_paragraph(data['corrected_essay'])
-                doc.add_heading("Summary Analysis", level=1)
-                doc.add_paragraph(data.get('summary','No summary'))
-                doc.add_heading("Scores", level=1)
-                doc.add_paragraph(f"Grammar: {data['grammar']}/10\nVocabulary: {data['vocabulary']}/10\nCoherence: {data['coherence']}/10\nStructure: {data['structure']}/10\nOverall: {overall}/10")
-                doc.add_heading("Teaching Mode – Explanation", level=1)
-                doc.add_paragraph(data["explanations"])
-                doc.save(doc_file_name)
-                with open(doc_file_name, "rb") as f:
-                    st.download_button("⬇️ Download Word Doc", f, file_name=doc_file_name)
 
-                # --- AI Detection ---
+                doc.add_heading("Original Essay", 1)
+                doc.add_paragraph(essay_text)
+
+                doc.add_heading("Corrected Essay", 1)
+                doc.add_paragraph(data["corrected_essay"])
+
+                doc.add_heading("Summary Analysis", 1)
+                doc.add_paragraph(data.get("summary", ""))
+
+                doc.add_heading("Scores", 1)
+                doc.add_paragraph(
+                    f"Grammar: {data['grammar']}/10\n"
+                    f"Vocabulary: {data['vocabulary']}/10\n"
+                    f"Coherence: {data['coherence']}/10\n"
+                    f"Structure: {data['structure']}/10\n"
+                    f"Overall Score: {overall}/10"
+                )
+
+                doc.add_heading("Teaching Mode – Explanation", 1)
+                doc.add_paragraph(data["explanations"])
+
+                doc.save(doc_name)
+
+                with open(doc_name, "rb") as f:
+                    st.download_button("⬇️ Download Word Document", f, file_name=doc_name)
+
+                # -------------------------
+                # AI DETECTION (OPTIONAL)
+                # -------------------------
                 if detect_ai:
                     st.subheader("🤖 AI Detection")
-                    st.info("Optional: Use an AI detection API here if available.")
-                
-                st.success("✅ Analysis Complete! Scroll up to see results.")
+                    st.info("Optional: You can integrate a real AI detection API here.")
+
+                st.success("✅ Analysis Complete! Scroll up to see your results.")
