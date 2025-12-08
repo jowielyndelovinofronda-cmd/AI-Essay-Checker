@@ -73,7 +73,7 @@ st.markdown("""
 .score-box { padding:15px; border-radius:10px; background:#eef2ff; text-align:center; font-size:22px; font-weight:600; margin:10px;}
 .corrected { background-color:#d4edda; padding:5px; border-radius:5px; }
 .summary { background-color:#fff3cd; padding:5px; border-radius:5px; }
-.footer { text-align:center; font-size:14px; color:#555; margin-top:40px;}
+.footer { text-align:center; font-size:16px; margin-top:30px; color:#555; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -122,6 +122,7 @@ if st.button("🔍 Evaluate Essay"):
         st.error("Please provide essay text via paste, image, or PDF.")
     else:
         with st.spinner("Analyzing essay with AI..."):
+            # --- Essay Evaluation ---
             prompt = f"""
             You are a professional essay evaluator.
 
@@ -206,10 +207,10 @@ if st.button("🔍 Evaluate Essay"):
                 pdf_file_name = "Essay_Evaluation_Report.pdf"
                 pdf = FPDF()
                 pdf.add_page()
-                try:
+                if os.path.exists("NotoSans-Regular.ttf"):
                     pdf.add_font('NotoSans', '', 'NotoSans-Regular.ttf', uni=True)
                     pdf.set_font("NotoSans", "", 12)
-                except:
+                else:
                     pdf.set_font("Helvetica", "", 12)
                 pdf.multi_cell(0, 8, f"Original Essay:\n{essay_text}\n")
                 pdf.multi_cell(0, 8, f"Corrected Essay:\n{data['corrected_essay']}\n")
@@ -241,11 +242,28 @@ if st.button("🔍 Evaluate Essay"):
                 # --- AI Detection ---
                 if detect_ai:
                     st.subheader("🤖 AI Detection")
-                    st.info("Optional: You can integrate a real AI detection API here.")
+                    with st.spinner("Checking if essay is AI-generated..."):
+                        ai_prompt = f"""
+                        You are an AI text classifier. Evaluate if the following essay
+                        was written by a human or AI. Answer only as JSON:
+                        {{
+                            "ai_generated": "Yes" or "No",
+                            "confidence": 0-100
+                        }}
+                        Essay:
+                        {essay_text}
+                        """
+                        ai_response = client.chat.completions.create(
+                            model="gpt-4o-mini",
+                            messages=[{"role":"user","content": ai_prompt}]
+                        )
+                        result_text = ai_response.choices[0].message.content
+                        try:
+                            ai_data = json.loads(result_text)
+                            st.write(f"AI-generated: {ai_data['ai_generated']}")
+                            st.write(f"Confidence: {ai_data['confidence']}%")
+                        except:
+                            st.warning("Could not parse AI detection output. Showing raw result:")
+                            st.write(result_text)
 
-                st.success("✅ Analysis Complete! Scroll up to see results.")
-
-# -----------------------------
-# Footer
-# -----------------------------
-st.markdown('<div class="footer">Thank you for using the checker!</div>', unsafe_allow_html=True)
+                st.success("✅ Analysis Complete! Thank you for using the checker!")
