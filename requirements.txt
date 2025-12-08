@@ -1,11 +1,11 @@
+openai
 streamlit
+python-dotenv
 python-docx
 fpdf
 pytesseract
 pdf2image
 PyPDF2
 wordcloud
-openai
-python-dotenv
 Pillow
 matplotlib
