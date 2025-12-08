@@ -1,119 +1,251 @@
 import streamlit as st
-from fpdf import FPDF
-from docx import Document
-from pdf2image import convert_from_bytes
-from PyPDF2 import PdfReader
-from wordcloud import WordCloud
+from openai import OpenAI
+from dotenv import load_dotenv
+import os
+import json
+import re
 from PIL import Image
 import pytesseract
-import io
-import base64
-import openai
-import os
-from dotenv import load_dotenv
+from pdf2image import convert_from_bytes
+import PyPDF2
+from wordcloud import WordCloud
+from fpdf import FPDF
+from docx import Document
+import matplotlib.pyplot as plt
 
-# Load environment variables
+# -----------------------------
+# Load API key
+# -----------------------------
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# Streamlit UI
-st.set_page_config(page_title="AI Text Originality Checker", layout="wide")
+# -----------------------------
+# Tesseract Path (OCR)
+# -----------------------------
+pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
-st.title("🧠 AI Text Originality Checker")
-
-uploaded_file = st.file_uploader("Upload TXT, DOCX, or PDF", type=["txt", "docx", "pdf"])
-
-def extract_text(file):
-    if file.type == "text/plain":
-        return file.read().decode("utf-8", errors="ignore")
-    elif file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-        doc = Document(file)
-        return "\n".join([p.text for p in doc.paragraphs])
-    elif file.type == "application/pdf":
-        text = ""
+# -----------------------------
+# Helper Functions
+# -----------------------------
+def extract_json_from_text(text):
+    try:
+        return json.loads(text)
+    except:
+        pass
+    m = re.search(r"\{.*\}", text, re.DOTALL)
+    if m:
         try:
-            reader = PdfReader(file)
-            for page in reader.pages:
-                text += page.extract_text() or ""
+            return json.loads(m.group(0))
         except:
-            images = convert_from_bytes(file.read())
+            pass
+    return None
+
+def ocr_image(img_file):
+    try:
+        img = Image.open(img_file)
+        return pytesseract.image_to_string(img).strip()
+    except Exception as e:
+        return f"ERROR: {e}"
+
+def ocr_pdf(pdf_file):
+    try:
+        pdf_reader = PyPDF2.PdfReader(pdf_file)
+        text = ""
+        for page in pdf_reader.pages:
+            text += page.extract_text() + "\n"
+        if not text.strip():
+            images = convert_from_bytes(pdf_file.read())
             for img in images:
-                text += pytesseract.image_to_string(img)
-        return text
-    return ""
+                text += pytesseract.image_to_string(img) + "\n"
+        return text.strip()
+    except Exception as e:
+        return f"ERROR: {e}"
 
-def create_wordcloud(text):
-    wc = WordCloud(width=800, height=400, background_color="white").generate(text)
-    img_bytes = io.BytesIO()
-    wc.to_image().save(img_bytes, format="PNG")
-    return img_bytes.getvalue()
+# -----------------------------
+# Streamlit App Config
+# -----------------------------
+st.set_page_config(page_title="AI Essay Checker + Scanner", page_icon="📘", layout="wide")
 
-def export_pdf(text):
-    pdf = FPDF()
-    pdf.add_page()
+st.markdown("""
+<style>
+.main-title { font-size:42px; font-weight:700; color:#003366; text-align:center; margin-bottom:-10px;}
+.subtitle { font-size:20px; color:#444; text-align:center; margin-bottom:30px;}
+.score-box { padding:15px; border-radius:10px; background:#eef2ff; text-align:center; font-size:22px; font-weight:600; margin:10px;}
+.corrected { background-color:#d4edda; padding:5px; border-radius:5px; }
+.summary { background-color:#fff3cd; padding:5px; border-radius:5px; }
+.footer { text-align:center; font-size:14px; color:#555; margin-top:40px;}
+</style>
+""", unsafe_allow_html=True)
 
-    # Use NotoSans if available
-    if os.path.exists("NotoSans-Regular.ttf"):
-        pdf.add_font("Noto", "", "NotoSans-Regular.ttf", uni=True)
-        pdf.set_font("Noto", "", 12)
+st.markdown('<div class="main-title">📘 AI Essay Evaluation System</div>', unsafe_allow_html=True)
+st.markdown('<div class="subtitle">Grammar • Spelling • Vocabulary • Coherence • Structure</div>', unsafe_allow_html=True)
+st.write("___")
+
+# -----------------------------
+# Input Mode Selection
+# -----------------------------
+mode = st.radio("Choose Input Method:", ["📄 Paste Text", "📷 Upload Image", "📑 Upload PDF / Scan"])
+essay_text = ""
+
+if mode == "📄 Paste Text":
+    st.subheader("📝 Enter Your Essay")
+    essay_text = st.text_area("Paste or type your essay below:", height=250)
+elif mode == "📷 Upload Image":
+    st.subheader("📷 Upload or Take a Photo of Your Essay")
+    uploaded_image = st.file_uploader("Upload image (PNG, JPG, JPEG)", type=["png","jpg","jpeg"])
+    camera_image = st.camera_input("Or take a photo")
+    img_source = uploaded_image if uploaded_image else camera_image
+    if img_source:
+        with st.spinner("Extracting text from image..."):
+            essay_text = ocr_image(img_source)
+        st.subheader("📄 Extracted Text")
+        st.write(essay_text)
+else:
+    st.subheader("📑 Upload PDF / Scanned Essay")
+    uploaded_pdf = st.file_uploader("Upload PDF", type=["pdf"])
+    if uploaded_pdf:
+        with st.spinner("Extracting text from PDF..."):
+            essay_text = ocr_pdf(uploaded_pdf)
+        st.subheader("📄 Extracted Text")
+        st.write(essay_text)
+
+# -----------------------------
+# Optional AI Detection
+# -----------------------------
+detect_ai = st.checkbox("Check if essay is AI-generated")
+
+# -----------------------------
+# Evaluate Button
+# -----------------------------
+if st.button("🔍 Evaluate Essay"):
+    if not essay_text.strip():
+        st.error("Please provide essay text via paste, image, or PDF.")
     else:
-        pdf.set_font("Helvetica", "", 12)
+        with st.spinner("Analyzing essay with AI..."):
+            prompt = f"""
+            You are a professional essay evaluator.
 
-    pdf.multi_cell(0, 10, text)
-    file_path = "output.pdf"
-    pdf.output(file_path)
-    return file_path
+            Evaluate the following essay for:
+            - Grammar
+            - Spelling
+            - Vocabulary
+            - Coherence
+            - Structure
 
-def export_docx(text):
-    doc = Document()
-    doc.add_paragraph(text)
-    file_path = "output.docx"
-    doc.save(file_path)
-    return file_path
+            Provide a corrected essay, a summary analysis, and sentence-by-sentence explanations.
 
-def ai_check(text):
-    prompt = f"""
-    Analyze the following text and detect if it is AI-generated or human-written.
+            Output ONLY JSON:
+            {{
+                "grammar": 1-10,
+                "vocabulary": 1-10,
+                "coherence": 1-10,
+                "structure": 1-10,
+                "corrected_essay": "corrected essay version",
+                "summary": "brief summary analysis",
+                "explanations": "sentence-by-sentence explanation"
+            }}
 
-    TEXT:
-    {text}
+            Essay:
+            {essay_text}
+            """
 
-    Provide the following in JSON:
-    - ai_score (0–100)
-    - human_score (0–100)
-    - verdict (AI-generated, Human-written, or Mixed)
-    - explanation (brief)
-    """
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role":"user","content":prompt}]
+            )
 
-    response = openai.ChatCompletion.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}]
-    )
+            raw = response.choices[0].message.content
+            data = extract_json_from_text(raw)
 
-    return response["choices"][0]["message"]["content"]
+            if data is None:
+                st.error("⚠️ Unexpected AI output. Showing raw response.")
+                st.write(raw)
+            else:
+                # --- Evaluation Scores ---
+                st.subheader("📊 Evaluation Scores")
+                col1, col2, col3, col4 = st.columns(4)
+                col1.markdown(f"<div class='score-box'>Grammar<br>{data['grammar']}/10</div>", unsafe_allow_html=True)
+                col2.markdown(f"<div class='score-box'>Vocabulary<br>{data['vocabulary']}/10</div>", unsafe_allow_html=True)
+                col3.markdown(f"<div class='score-box'>Coherence<br>{data['coherence']}/10</div>", unsafe_allow_html=True)
+                col4.markdown(f"<div class='score-box'>Structure<br>{data['structure']}/10</div>", unsafe_allow_html=True)
 
-if uploaded_file:
-    extracted_text = extract_text(uploaded_file)
-    st.subheader("📄 Extracted Text")
-    st.write(extracted_text)
+                st.write("---")
 
-    st.subheader("☁️ Word Cloud")
-    img_data = create_wordcloud(extracted_text)
-    st.image(img_data)
+                # --- Corrected Essay ---
+                st.subheader("✔ Corrected Essay")
+                st.markdown(f"<div class='corrected'>{data['corrected_essay']}</div>", unsafe_allow_html=True)
 
-    st.subheader("🤖 AI Detection Result")
-    result = ai_check(extracted_text)
-    st.write(result)
+                # --- Summary Analysis ---
+                st.subheader("📑 Summary Analysis")
+                st.markdown(f"<div class='summary'>{data.get('summary','No summary')}</div>", unsafe_allow_html=True)
 
-    # Download buttons
-    pdf_path = export_pdf(extracted_text)
-    docx_path = export_docx(extracted_text)
+                # --- Teaching Mode ---
+                st.subheader("📘 Teaching Mode – Explanation")
+                st.write(data["explanations"])
 
-    with open(pdf_path, "rb") as f:
-        st.download_button("📥 Download as PDF", f, file_name="checked_output.pdf")
+                # --- Overall Score ---
+                try:
+                    scores = [int(data['grammar']), int(data['vocabulary']),
+                              int(data['coherence']), int(data['structure'])]
+                    overall = sum(scores)/len(scores)
+                except:
+                    overall = "N/A"
+                st.subheader("🏆 Overall Score")
+                st.metric("Overall Score (out of 10)", overall)
 
-    with open(docx_path, "rb") as f:
-        st.download_button("📥 Download as DOCX", f, file_name="checked_output.docx")
+                # --- Word Cloud ---
+                st.subheader("☁️ Essay Word Cloud")
+                wordcloud = WordCloud(width=800, height=400, background_color='white').generate(essay_text)
+                fig, ax = plt.subplots(figsize=(10,5))
+                ax.imshow(wordcloud, interpolation='bilinear')
+                ax.axis("off")
+                st.pyplot(fig)
 
-st.markdown("---")
-st.markdown("### Thank you for using the checker! 💛")
+                # --- PDF Download ---
+                st.subheader("📄 Download Corrected Essay & Summary")
+                pdf_file_name = "Essay_Evaluation_Report.pdf"
+                pdf = FPDF()
+                pdf.add_page()
+                try:
+                    pdf.add_font('NotoSans', '', 'NotoSans-Regular.ttf', uni=True)
+                    pdf.set_font("NotoSans", "", 12)
+                except:
+                    pdf.set_font("Helvetica", "", 12)
+                pdf.multi_cell(0, 8, f"Original Essay:\n{essay_text}\n")
+                pdf.multi_cell(0, 8, f"Corrected Essay:\n{data['corrected_essay']}\n")
+                pdf.multi_cell(0, 8, f"Summary Analysis:\n{data.get('summary','No summary')}\n")
+                pdf.multi_cell(0, 8, f"Scores:\nGrammar: {data['grammar']}/10\nVocabulary: {data['vocabulary']}/10\nCoherence: {data['coherence']}/10\nStructure: {data['structure']}/10\nOverall: {overall}/10\n")
+                pdf_file_path = pdf_file_name
+                pdf.output(pdf_file_path)
+                with open(pdf_file_path, "rb") as f:
+                    st.download_button("⬇️ Download PDF", f, file_name=pdf_file_name)
+
+                # --- Word Document Option ---
+                doc_file_name = "Essay_Evaluation_Report.docx"
+                doc = Document()
+                doc.add_heading("AI Essay Evaluation Report", 0)
+                doc.add_heading("Original Essay", level=1)
+                doc.add_paragraph(essay_text)
+                doc.add_heading("Corrected Essay", level=1)
+                doc.add_paragraph(data['corrected_essay'])
+                doc.add_heading("Summary Analysis", level=1)
+                doc.add_paragraph(data.get('summary','No summary'))
+                doc.add_heading("Scores", level=1)
+                doc.add_paragraph(f"Grammar: {data['grammar']}/10\nVocabulary: {data['vocabulary']}/10\nCoherence: {data['coherence']}/10\nStructure: {data['structure']}/10\nOverall: {overall}/10")
+                doc.add_heading("Teaching Mode – Explanation", level=1)
+                doc.add_paragraph(data["explanations"])
+                doc.save(doc_file_name)
+                with open(doc_file_name, "rb") as f:
+                    st.download_button("⬇️ Download Word Doc", f, file_name=doc_file_name)
+
+                # --- AI Detection ---
+                if detect_ai:
+                    st.subheader("🤖 AI Detection")
+                    st.info("Optional: You can integrate a real AI detection API here.")
+
+                st.success("✅ Analysis Complete! Scroll up to see results.")
+
+# -----------------------------
+# Footer
+# -----------------------------
+st.markdown('<div class="footer">Thank you for using the checker!</div>', unsafe_allow_html=True)
