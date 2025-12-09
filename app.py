@@ -10,6 +10,7 @@ from wordcloud import WordCloud
 import os
 import json
 import re
+import io  # Added for handling PDF bytes properly
 
 # -----------------------------
 # Helper Functions
@@ -35,12 +36,15 @@ def ocr_image(img_file):
 
 def ocr_pdf(pdf_file):
     try:
-        pdf_reader = PyPDF2.PdfReader(pdf_file)
+        # Read the PDF bytes once to avoid stream issues
+        pdf_bytes = pdf_file.read()
+        pdf_reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
         text = ""
         for page in pdf_reader.pages:
             text += page.extract_text() + "\n"
         if not text.strip():
-            images = convert_from_bytes(pdf_file.read())
+            # If no text extracted, perform OCR on images
+            images = convert_from_bytes(pdf_bytes)
             for img in images:
                 text += pytesseract.image_to_string(img) + "\n"
         return text.strip()
