@@ -1,18 +1,51 @@
 import streamlit as st
+from dotenv import load_dotenv
+import os
+import json
+import re
 from PIL import Image
 import pytesseract
 from pdf2image import convert_from_bytes
 import PyPDF2
+from wordcloud import WordCloud
 from fpdf import FPDF
 from docx import Document
-from wordcloud import WordCloud
 import matplotlib.pyplot as plt
-import json
-import re
+
+# -----------------------------
+# Load environment variables
+# -----------------------------
+load_dotenv()
+
+# -----------------------------
+# Tesseract OCR Configuration
+# -----------------------------
+tesseract_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+if os.path.exists(tesseract_path):
+    pytesseract.pytesseract.tesseract_cmd = tesseract_path
+
+try:
+    pytesseract.get_tesseract_version()
+    tesseract_available = True
+except:
+    tesseract_available = False
 
 # -----------------------------
 # Helper Functions
 # -----------------------------
+def extract_json_from_text(text):
+    try:
+        return json.loads(text)
+    except:
+        pass
+    m = re.search(r"\{.*\}", text, re.DOTALL)
+    if m:
+        try:
+            return json.loads(m.group(0))
+        except:
+            pass
+    return None
+
 def ocr_image(img_file):
     try:
         img = Image.open(img_file)
@@ -34,35 +67,10 @@ def ocr_pdf(pdf_file):
     except Exception as e:
         return f"ERROR: {e}"
 
-def sanitize_text(text):
-    # Replace unsupported characters for PDF if needed
-    return text.encode('latin1', errors='replace').decode('latin1')
-
-def extract_json_from_text(text):
-    try:
-        return json.loads(text)
-    except:
-        m = re.search(r"\{.*\}", text, re.DOTALL)
-        if m:
-            try:
-                return json.loads(m.group(0))
-            except:
-                pass
-    return None
-
-# -----------------------------
-# Check if Tesseract OCR is installed
-# -----------------------------
-try:
-    pytesseract.get_tesseract_version()
-    tesseract_available = True
-except:
-    tesseract_available = False
-
 # -----------------------------
 # Streamlit App Config
 # -----------------------------
-st.set_page_config(page_title="AI Essay Checker", page_icon="📘", layout="wide")
+st.set_page_config(page_title="AI Essay Checker + Scanner", page_icon="📘", layout="wide")
 
 st.markdown("""
 <style>
@@ -81,24 +89,14 @@ st.write("___")
 # -----------------------------
 # Input Mode Selection
 # -----------------------------
-mode = st.radio("Choose Input Method:", ["📄 Paste Text", "📷 Upload Image", "📸 Camera Scan", "📑 Upload PDF / Scan"])
+mode = st.radio("Choose Input Method:", ["📄 Paste Text", "📷 Camera Scan", "📑 Upload PDF"])
 essay_text = ""
 
 if mode == "📄 Paste Text":
     st.subheader("📝 Enter Your Essay")
     essay_text = st.text_area("Paste or type your essay below:", height=250)
 
-elif mode == "📷 Upload Image":
-    st.subheader("📷 Upload or Take a Photo of Your Essay")
-    uploaded_image = st.file_uploader("Upload image (PNG, JPG, JPEG)", type=["png","jpg","jpeg"])
-    if uploaded_image:
-        with st.spinner("Extracting text from image..."):
-            essay_text = ocr_image(uploaded_image)
-        st.subheader("📄 Extracted Text")
-        st.text_area("Extracted Essay Text", essay_text, height=200)
-
-elif mode == "📸 Camera Scan":
-    st.subheader("📸 Camera Input")
+elif mode == "📷 Camera Scan":
     if not tesseract_available:
         st.warning("⚠️ Tesseract OCR is not installed. Camera scanning is disabled.")
     else:
@@ -107,7 +105,7 @@ elif mode == "📸 Camera Scan":
             with st.spinner("Extracting text from camera image..."):
                 essay_text = ocr_image(camera_image)
             st.subheader("📄 Extracted Text")
-            st.text_area("Extracted Essay Text", essay_text, height=200)
+            st.write(essay_text)
 
 else:
     st.subheader("📑 Upload PDF / Scanned Essay")
@@ -116,52 +114,44 @@ else:
         with st.spinner("Extracting text from PDF..."):
             essay_text = ocr_pdf(uploaded_pdf)
         st.subheader("📄 Extracted Text")
-        st.text_area("Extracted Essay Text", essay_text, height=200)
+        st.write(essay_text)
 
 # -----------------------------
-# Evaluate Button (Offline Dummy)
+# Evaluate Button
 # -----------------------------
 if st.button("🔍 Evaluate Essay"):
     if not essay_text.strip():
-        st.error("Please provide essay text via paste, image, camera, or PDF.")
+        st.error("Please provide essay text via paste, camera scan, or PDF.")
     else:
-        # Dummy evaluation (replace with AI if desired)
-        import random
-        data = {
-            "grammar": random.randint(5,10),
-            "vocabulary": random.randint(5,10),
-            "coherence": random.randint(5,10),
-            "structure": random.randint(5,10),
-            "corrected_essay": essay_text,  # for now just original text
-            "summary": "This is a summary analysis placeholder.",
-            "explanations": "Sentence-by-sentence explanations placeholder."
-        }
+        # For simplicity, this version only demonstrates local corrections.
+        # You can integrate your AI evaluation logic here.
+        corrected_essay = essay_text  # Replace with actual corrected text if AI is used
+        summary_analysis = "This is a placeholder summary of the essay."
+        grammar_score = 8
+        vocabulary_score = 8
+        coherence_score = 8
+        structure_score = 8
+        overall = round((grammar_score + vocabulary_score + coherence_score + structure_score)/4, 2)
 
         # --- Evaluation Scores ---
         st.subheader("📊 Evaluation Scores")
         col1, col2, col3, col4 = st.columns(4)
-        col1.markdown(f"<div class='score-box'>Grammar<br>{data['grammar']}/10</div>", unsafe_allow_html=True)
-        col2.markdown(f"<div class='score-box'>Vocabulary<br>{data['vocabulary']}/10</div>", unsafe_allow_html=True)
-        col3.markdown(f"<div class='score-box'>Coherence<br>{data['coherence']}/10</div>", unsafe_allow_html=True)
-        col4.markdown(f"<div class='score-box'>Structure<br>{data['structure']}/10</div>", unsafe_allow_html=True)
+        col1.markdown(f"<div class='score-box'>Grammar<br>{grammar_score}/10</div>", unsafe_allow_html=True)
+        col2.markdown(f"<div class='score-box'>Vocabulary<br>{vocabulary_score}/10</div>", unsafe_allow_html=True)
+        col3.markdown(f"<div class='score-box'>Coherence<br>{coherence_score}/10</div>", unsafe_allow_html=True)
+        col4.markdown(f"<div class='score-box'>Structure<br>{structure_score}/10</div>", unsafe_allow_html=True)
 
         st.write("---")
 
         # --- Corrected Essay ---
         st.subheader("✔ Corrected Essay")
-        st.markdown(f"<div class='corrected'>{data['corrected_essay']}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='corrected'>{corrected_essay}</div>", unsafe_allow_html=True)
 
         # --- Summary Analysis ---
         st.subheader("📑 Summary Analysis")
-        st.markdown(f"<div class='summary'>{data.get('summary','No summary')}</div>", unsafe_allow_html=True)
-
-        # --- Teaching Mode ---
-        st.subheader("📘 Teaching Mode – Explanation")
-        st.write(data["explanations"])
+        st.markdown(f"<div class='summary'>{summary_analysis}</div>", unsafe_allow_html=True)
 
         # --- Overall Score ---
-        scores = [data['grammar'], data['vocabulary'], data['coherence'], data['structure']]
-        overall = sum(scores)/len(scores)
         st.subheader("🏆 Overall Score")
         st.metric("Overall Score (out of 10)", overall)
 
@@ -174,21 +164,16 @@ if st.button("🔍 Evaluate Essay"):
         st.pyplot(fig)
 
         # --- PDF Download ---
-        st.subheader("📄 Download Corrected Essay & Summary")
         pdf_file_name = "Essay_Evaluation_Report.pdf"
         pdf = FPDF()
         pdf.add_page()
-        try:
-            pdf.add_font('NotoSans', '', 'NotoSans-Regular.ttf', uni=True)
-            pdf.set_font("NotoSans", "", 12)
-        except:
-            pdf.set_font("Helvetica", "", 12)
+        pdf.set_font("Arial", "", 12)
         pdf.multi_cell(0, 8, f"Original Essay:\n{essay_text}\n")
-        pdf.multi_cell(0, 8, f"Corrected Essay:\n{data['corrected_essay']}\n")
-        pdf.multi_cell(0, 8, f"Summary Analysis:\n{data.get('summary','No summary')}\n")
-        pdf_file_path = pdf_file_name
-        pdf.output(pdf_file_path)
-        with open(pdf_file_path, "rb") as f:
+        pdf.multi_cell(0, 8, f"Corrected Essay:\n{corrected_essay}\n")
+        pdf.multi_cell(0, 8, f"Summary Analysis:\n{summary_analysis}\n")
+        pdf.multi_cell(0, 8, f"Scores:\nGrammar: {grammar_score}/10\nVocabulary: {vocabulary_score}/10\nCoherence: {coherence_score}/10\nStructure: {structure_score}/10\nOverall: {overall}/10\n")
+        pdf.output(pdf_file_name)
+        with open(pdf_file_name, "rb") as f:
             st.download_button("⬇️ Download PDF", f, file_name=pdf_file_name)
 
         # --- Word Document Option ---
@@ -198,9 +183,11 @@ if st.button("🔍 Evaluate Essay"):
         doc.add_heading("Original Essay", level=1)
         doc.add_paragraph(essay_text)
         doc.add_heading("Corrected Essay", level=1)
-        doc.add_paragraph(data['corrected_essay'])
+        doc.add_paragraph(corrected_essay)
         doc.add_heading("Summary Analysis", level=1)
-        doc.add_paragraph(data.get('summary','No summary'))
+        doc.add_paragraph(summary_analysis)
+        doc.add_heading("Scores", level=1)
+        doc.add_paragraph(f"Grammar: {grammar_score}/10\nVocabulary: {vocabulary_score}/10\nCoherence: {coherence_score}/10\nStructure: {structure_score}/10\nOverall: {overall}/10")
         doc.save(doc_file_name)
         with open(doc_file_name, "rb") as f:
             st.download_button("⬇️ Download Word Doc", f, file_name=doc_file_name)
