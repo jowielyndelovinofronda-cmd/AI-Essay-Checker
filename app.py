@@ -7,8 +7,7 @@ from io import BytesIO
 from fpdf import FPDF
 import json
 import re
-import matplotlib.pyplot as plt
-from wordcloud import WordCloud
+from streamlit_cropper import st_cropper
 
 # -----------------------------
 # Helper Functions
@@ -26,11 +25,8 @@ def extract_json_from_text(text):
     return None
 
 def ocr_image(img):
-    # Use EasyOCR to extract text from PIL Image
-    img_bytes = BytesIO()
-    img.save(img_bytes, format='JPEG')
-    img_bytes.seek(0)
-    result = reader.readtext(img_bytes.getvalue(), detail=0)
+    # EasyOCR expects numpy array
+    result = reader.readtext(img, detail=0)
     return "\n".join(result)
 
 def ocr_pdf(pdf_file):
@@ -66,22 +62,31 @@ st.subheader("Grammar • Spelling • Vocabulary • Coherence • Structure")
 mode = st.radio("Choose Input Method:", ["📄 Paste Text", "📷 Upload Image", "📸 Camera Scan", "📑 Upload PDF / Scan"])
 essay_text = ""
 
+# -----------------------------
+# Text Input
+# -----------------------------
 if mode == "📄 Paste Text":
     essay_text = st.text_area("Paste or type your essay below:", height=250)
 
+# -----------------------------
+# Upload Image
+# -----------------------------
 elif mode == "📷 Upload Image":
     uploaded_image = st.file_uploader("Upload image (PNG, JPG, JPEG)", type=["png","jpg","jpeg"])
     if uploaded_image:
         img = Image.open(uploaded_image)
         st.image(img, caption="Uploaded Image", use_column_width=True)
-        # Optional: crop selection
         crop = st.checkbox("Crop Image before OCR")
         if crop:
-            st.warning("Cropping feature: select the area (placeholder, integrate advanced cropping if needed)")
+            img = st_cropper(img, realtime_update=True, box_color="#FF0000", aspect_ratio=None)
+            st.image(img, caption="Cropped Image", use_column_width=True)
         essay_text = ocr_image(img)
         st.subheader("📄 Extracted Text")
         st.write(essay_text)
 
+# -----------------------------
+# Camera Scan
+# -----------------------------
 elif mode == "📸 Camera Scan":
     camera_image = st.camera_input("Take a photo of your essay")
     if camera_image:
@@ -89,11 +94,15 @@ elif mode == "📸 Camera Scan":
         st.image(img, caption="Camera Image", use_column_width=True)
         crop = st.checkbox("Crop Camera Image before OCR")
         if crop:
-            st.warning("Cropping feature: select the area to scan (like Google Lens) - placeholder for UI")
+            img = st_cropper(img, realtime_update=True, box_color="#00FF00", aspect_ratio=None)
+            st.image(img, caption="Cropped Camera Image", use_column_width=True)
         essay_text = ocr_image(img)
         st.subheader("📄 Extracted Text")
         st.write(essay_text)
 
+# -----------------------------
+# PDF Input
+# -----------------------------
 else:  # PDF
     uploaded_pdf = st.file_uploader("Upload PDF", type=["pdf"])
     if uploaded_pdf:
