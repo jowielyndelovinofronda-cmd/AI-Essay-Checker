@@ -1,9 +1,10 @@
 streamlit
-pytesseract
+pillow
 pdf2image
 PyPDF2
-wordcloud
 fpdf
 python-docx
-Pillow
 matplotlib
+wordcloud
+numpy
+easyocr
