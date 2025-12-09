@@ -1,6 +1,6 @@
 import streamlit as st
 from PIL import Image
-import pytesseract
+import easyocr
 from pdf2image import convert_from_bytes
 import PyPDF2
 from fpdf import FPDF
@@ -28,8 +28,10 @@ def extract_json_from_text(text):
 
 def ocr_image(img_file):
     try:
-        img = Image.open(img_file)
-        return pytesseract.image_to_string(img).strip()
+        reader = easyocr.Reader(['en'], gpu=False)
+        img = Image.open(img_file).convert("RGB")
+        result = reader.readtext(np.array(img), detail=0)
+        return "\n".join(result)
     except Exception as e:
         return f"ERROR: {e}"
 
@@ -42,29 +44,23 @@ def ocr_pdf(pdf_file):
         if not text.strip():
             images = convert_from_bytes(pdf_file.read())
             for img in images:
-                text += pytesseract.image_to_string(img) + "\n"
+                text += ocr_image(img) + "\n"
         return text.strip()
     except Exception as e:
         return f"ERROR: {e}"
 
 # -----------------------------
-# Check Tesseract availability
-# -----------------------------
-try:
-    pytesseract.get_tesseract_version()
-    tesseract_available = True
-except:
-    tesseract_available = False
-
-# -----------------------------
 # Streamlit App Config
 # -----------------------------
-st.set_page_config(page_title="AI Essay Checker + Scanner", page_icon="📘", layout="wide")
+st.set_page_config(page_title="AI Essay Checker + Camera OCR", page_icon="📘", layout="wide")
 
 st.markdown("""
 <style>
 .main-title { font-size:42px; font-weight:700; color:#003366; text-align:center; margin-bottom:-10px;}
 .subtitle { font-size:20px; color:#444; text-align:center; margin-bottom:30px;}
+.score-box { padding:15px; border-radius:10px; background:#eef2ff; text-align:center; font-size:22px; font-weight:600; margin:10px;}
+.corrected { padding:5px; border-radius:5px; }
+.summary { background-color:#fff3cd; padding:5px; border-radius:5px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -89,18 +85,15 @@ elif mode == "📷 Upload Image":
         with st.spinner("Extracting text from image..."):
             essay_text = ocr_image(uploaded_image)
         st.subheader("📄 Extracted Text")
-        st.text_area("Extracted Text", value=essay_text, height=250)
+        st.write(essay_text)
 
 elif mode == "📸 Camera Scan":
-    if tesseract_available:
-        camera_image = st.camera_input("Take a photo of your essay")
-        if camera_image:
-            with st.spinner("Extracting text from camera image..."):
-                essay_text = ocr_image(camera_image)
-            st.subheader("📄 Extracted Text")
-            st.text_area("Extracted Text", value=essay_text, height=250)
-    else:
-        st.warning("⚠️ Tesseract OCR is not installed. Camera scanning is disabled.")
+    camera_image = st.camera_input("Take a photo of your essay")
+    if camera_image:
+        with st.spinner("Extracting text from camera image..."):
+            essay_text = ocr_image(camera_image)
+        st.subheader("📄 Extracted Text")
+        st.write(essay_text)
 
 else:
     st.subheader("📑 Upload PDF / Scanned Essay")
@@ -109,41 +102,21 @@ else:
         with st.spinner("Extracting text from PDF..."):
             essay_text = ocr_pdf(uploaded_pdf)
         st.subheader("📄 Extracted Text")
-        st.text_area("Extracted Text", value=essay_text, height=250)
+        st.write(essay_text)
 
 # -----------------------------
-# Evaluate Button
+# Evaluate Button (placeholder)
 # -----------------------------
 if st.button("🔍 Evaluate Essay"):
     if not essay_text.strip():
         st.error("Please provide essay text via paste, image, camera, or PDF.")
     else:
-        # Corrected Essay
+        # Placeholder for actual evaluation logic
         st.subheader("✔ Corrected Essay")
-        st.text_area("Corrected Essay", value=essay_text, height=250)
+        st.text_area("Corrected Essay", essay_text, height=200)
 
-        # Criteria Scores (dynamic placeholders)
-        st.subheader("📊 Criteria Scores")
-        criteria = {
-            "Grammar": "Automatically evaluated score",
-            "Spelling": "Automatically evaluated score",
-            "Vocabulary": "Automatically evaluated score",
-            "Coherence": "Automatically evaluated score",
-            "Structure": "Automatically evaluated score"
-        }
-        st.json(criteria)
-
-        # Summary Analysis
         st.subheader("📑 Summary Analysis")
-        st.text_area("Summary Analysis", value="Automatically generated analysis based on essay.", height=100)
+        st.markdown(f"<div class='summary'>This is a placeholder summary analysis with criteria scores.</div>", unsafe_allow_html=True)
 
-        # Download Corrected Essay
-        st.download_button(
-            label="💾 Download Corrected Essay",
-            data=essay_text,
-            file_name="corrected_essay.txt",
-            mime="text/plain"
-        )
+        st.success("Thank you for using AI Essay Checker!")
 
-        # Thank you note
-        st.success("Thank you for using the AI Essay Checker!")
