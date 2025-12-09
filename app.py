@@ -1,5 +1,4 @@
 import streamlit as st
-from openai import OpenAI
 from dotenv import load_dotenv
 import os
 import json
@@ -14,10 +13,9 @@ from docx import Document
 import matplotlib.pyplot as plt
 
 # -----------------------------
-# Load API key
+# Load environment variables
 # -----------------------------
 load_dotenv()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # -----------------------------
 # Tesseract Path (OCR)
@@ -64,7 +62,7 @@ def ocr_pdf(pdf_file):
 # -----------------------------
 # Streamlit App Config
 # -----------------------------
-st.set_page_config(page_title="AI Essay Checker + Scanner", page_icon="📘", layout="wide")
+st.set_page_config(page_title="AI Essay Checker", page_icon="📘", layout="wide")
 
 st.markdown("""
 <style>
@@ -73,7 +71,7 @@ st.markdown("""
 .score-box { padding:15px; border-radius:10px; background:#eef2ff; text-align:center; font-size:22px; font-weight:600; margin:10px;}
 .corrected { background-color:#d4edda; padding:5px; border-radius:5px; }
 .summary { background-color:#fff3cd; padding:5px; border-radius:5px; }
-.footer { text-align:center; font-size:16px; margin-top:30px; color:#555; }
+.footer { text-align:center; margin-top:30px; font-weight:600; color:#555; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -84,22 +82,31 @@ st.write("___")
 # -----------------------------
 # Input Mode Selection
 # -----------------------------
-mode = st.radio("Choose Input Method:", ["📄 Paste Text", "📷 Upload Image", "📑 Upload PDF / Scan"])
+mode = st.radio("Choose Input Method:", ["📄 Paste Text", "📷 Image / Camera Scan", "📑 Upload PDF / Scan"])
 essay_text = ""
 
 if mode == "📄 Paste Text":
     st.subheader("📝 Enter Your Essay")
     essay_text = st.text_area("Paste or type your essay below:", height=250)
-elif mode == "📷 Upload Image":
-    st.subheader("📷 Upload or Take a Photo of Your Essay")
-    uploaded_image = st.file_uploader("Upload image (PNG, JPG, JPEG)", type=["png","jpg","jpeg"])
-    camera_image = st.camera_input("Or take a photo")
-    img_source = uploaded_image if uploaded_image else camera_image
-    if img_source:
-        with st.spinner("Extracting text from image..."):
-            essay_text = ocr_image(img_source)
-        st.subheader("📄 Extracted Text")
+
+elif mode == "📷 Image / Camera Scan":
+    st.subheader("📷 Upload Image or Scan with Camera")
+    
+    uploaded_image = st.file_uploader("Upload an image (PNG, JPG, JPEG)", type=["png","jpg","jpeg"])
+    camera_image = st.camera_input("Take a photo using your camera")
+
+    if uploaded_image:
+        with st.spinner("Extracting text from uploaded image..."):
+            essay_text = ocr_image(uploaded_image)
+        st.subheader("📄 Extracted Text from Uploaded Image")
         st.write(essay_text)
+
+    elif camera_image:
+        with st.spinner("Extracting text from camera image..."):
+            essay_text = ocr_image(camera_image)
+        st.subheader("📄 Extracted Text from Camera Capture")
+        st.write(essay_text)
+
 else:
     st.subheader("📑 Upload PDF / Scanned Essay")
     uploaded_pdf = st.file_uploader("Upload PDF", type=["pdf"])
@@ -110,160 +117,96 @@ else:
         st.write(essay_text)
 
 # -----------------------------
-# Optional AI Detection
-# -----------------------------
-detect_ai = st.checkbox("Check if essay is AI-generated")
-
-# -----------------------------
 # Evaluate Button
 # -----------------------------
 if st.button("🔍 Evaluate Essay"):
     if not essay_text.strip():
-        st.error("Please provide essay text via paste, image, or PDF.")
+        st.error("Please provide essay text via paste, image, camera, or PDF.")
     else:
-        with st.spinner("Analyzing essay with AI..."):
-            # --- Essay Evaluation ---
-            prompt = f"""
-            You are a professional essay evaluator.
+        with st.spinner("Analyzing essay..."):
+            # Dummy analysis (replace this with your OpenAI or local model if needed)
+            data = {
+                "grammar": 8,
+                "vocabulary": 7,
+                "coherence": 8,
+                "structure": 7,
+                "corrected_essay": essay_text.upper(),  # demo correction
+                "summary": "This essay is generally well-structured with minor grammar issues.",
+                "explanations": "Sentence-by-sentence explanation goes here."
+            }
 
-            Evaluate the following essay for:
-            - Grammar
-            - Spelling
-            - Vocabulary
-            - Coherence
-            - Structure
+            # --- Evaluation Scores ---
+            st.subheader("📊 Evaluation Scores")
+            col1, col2, col3, col4 = st.columns(4)
+            col1.markdown(f"<div class='score-box'>Grammar<br>{data['grammar']}/10</div>", unsafe_allow_html=True)
+            col2.markdown(f"<div class='score-box'>Vocabulary<br>{data['vocabulary']}/10</div>", unsafe_allow_html=True)
+            col3.markdown(f"<div class='score-box'>Coherence<br>{data['coherence']}/10</div>", unsafe_allow_html=True)
+            col4.markdown(f"<div class='score-box'>Structure<br>{data['structure']}/10</div>", unsafe_allow_html=True)
 
-            Provide a corrected essay, a summary analysis, and sentence-by-sentence explanations.
+            st.write("---")
 
-            Output ONLY JSON:
-            {{
-                "grammar": 1-10,
-                "vocabulary": 1-10,
-                "coherence": 1-10,
-                "structure": 1-10,
-                "corrected_essay": "corrected essay version",
-                "summary": "brief summary analysis",
-                "explanations": "sentence-by-sentence explanation"
-            }}
+            # --- Corrected Essay ---
+            st.subheader("✔ Corrected Essay")
+            st.markdown(f"<div class='corrected'>{data['corrected_essay']}</div>", unsafe_allow_html=True)
 
-            Essay:
-            {essay_text}
-            """
+            # --- Summary Analysis ---
+            st.subheader("📑 Summary Analysis")
+            st.markdown(f"<div class='summary'>{data.get('summary','No summary')}</div>", unsafe_allow_html=True)
 
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role":"user","content":prompt}]
-            )
+            # --- Teaching Mode ---
+            st.subheader("📘 Teaching Mode – Explanation")
+            st.write(data["explanations"])
 
-            raw = response.choices[0].message.content
-            data = extract_json_from_text(raw)
+            # --- Overall Score ---
+            scores = [int(data['grammar']), int(data['vocabulary']), int(data['coherence']), int(data['structure'])]
+            overall = sum(scores)/len(scores)
+            st.subheader("🏆 Overall Score")
+            st.metric("Overall Score (out of 10)", overall)
 
-            if data is None:
-                st.error("⚠️ Unexpected AI output. Showing raw response.")
-                st.write(raw)
-            else:
-                # --- Evaluation Scores ---
-                st.subheader("📊 Evaluation Scores")
-                col1, col2, col3, col4 = st.columns(4)
-                col1.markdown(f"<div class='score-box'>Grammar<br>{data['grammar']}/10</div>", unsafe_allow_html=True)
-                col2.markdown(f"<div class='score-box'>Vocabulary<br>{data['vocabulary']}/10</div>", unsafe_allow_html=True)
-                col3.markdown(f"<div class='score-box'>Coherence<br>{data['coherence']}/10</div>", unsafe_allow_html=True)
-                col4.markdown(f"<div class='score-box'>Structure<br>{data['structure']}/10</div>", unsafe_allow_html=True)
+            # --- Word Cloud ---
+            st.subheader("☁️ Essay Word Cloud")
+            wordcloud = WordCloud(width=800, height=400, background_color='white').generate(essay_text)
+            fig, ax = plt.subplots(figsize=(10,5))
+            ax.imshow(wordcloud, interpolation='bilinear')
+            ax.axis("off")
+            st.pyplot(fig)
 
-                st.write("---")
+            # --- PDF Download ---
+            st.subheader("📄 Download Corrected Essay & Summary")
+            pdf_file_name = "Essay_Evaluation_Report.pdf"
+            pdf = FPDF()
+            pdf.add_page()
+            # Use NotoSans for full Unicode support if available
+            try:
+                pdf.add_font('NotoSans', '', 'NotoSans-Regular.ttf', uni=True)
+                pdf.set_font("NotoSans", "", 12)
+            except:
+                pdf.set_font("Helvetica", "", 12)
+            pdf.multi_cell(0, 8, f"Original Essay:\n{essay_text}\n")
+            pdf.multi_cell(0, 8, f"Corrected Essay:\n{data['corrected_essay']}\n")
+            pdf.multi_cell(0, 8, f"Summary Analysis:\n{data.get('summary','No summary')}\n")
+            pdf.multi_cell(0, 8, f"Scores:\nGrammar: {data['grammar']}/10\nVocabulary: {data['vocabulary']}/10\nCoherence: {data['coherence']}/10\nStructure: {data['structure']}/10\nOverall: {overall}/10\n")
+            pdf_file_path = pdf_file_name
+            pdf.output(pdf_file_path)
+            with open(pdf_file_path, "rb") as f:
+                st.download_button("⬇️ Download PDF", f, file_name=pdf_file_name)
 
-                # --- Corrected Essay ---
-                st.subheader("✔ Corrected Essay")
-                st.markdown(f"<div class='corrected'>{data['corrected_essay']}</div>", unsafe_allow_html=True)
+            # --- Word Document Option ---
+            doc_file_name = "Essay_Evaluation_Report.docx"
+            doc = Document()
+            doc.add_heading("AI Essay Evaluation Report", 0)
+            doc.add_heading("Original Essay", level=1)
+            doc.add_paragraph(essay_text)
+            doc.add_heading("Corrected Essay", level=1)
+            doc.add_paragraph(data['corrected_essay'])
+            doc.add_heading("Summary Analysis", level=1)
+            doc.add_paragraph(data.get('summary','No summary'))
+            doc.add_heading("Scores", level=1)
+            doc.add_paragraph(f"Grammar: {data['grammar']}/10\nVocabulary: {data['vocabulary']}/10\nCoherence: {data['coherence']}/10\nStructure: {data['structure']}/10\nOverall: {overall}/10")
+            doc.add_heading("Teaching Mode – Explanation", level=1)
+            doc.add_paragraph(data["explanations"])
+            doc.save(doc_file_name)
+            with open(doc_file_name, "rb") as f:
+                st.download_button("⬇️ Download Word Doc", f, file_name=doc_file_name)
 
-                # --- Summary Analysis ---
-                st.subheader("📑 Summary Analysis")
-                st.markdown(f"<div class='summary'>{data.get('summary','No summary')}</div>", unsafe_allow_html=True)
-
-                # --- Teaching Mode ---
-                st.subheader("📘 Teaching Mode – Explanation")
-                st.write(data["explanations"])
-
-                # --- Overall Score ---
-                try:
-                    scores = [int(data['grammar']), int(data['vocabulary']),
-                              int(data['coherence']), int(data['structure'])]
-                    overall = sum(scores)/len(scores)
-                except:
-                    overall = "N/A"
-                st.subheader("🏆 Overall Score")
-                st.metric("Overall Score (out of 10)", overall)
-
-                # --- Word Cloud ---
-                st.subheader("☁️ Essay Word Cloud")
-                wordcloud = WordCloud(width=800, height=400, background_color='white').generate(essay_text)
-                fig, ax = plt.subplots(figsize=(10,5))
-                ax.imshow(wordcloud, interpolation='bilinear')
-                ax.axis("off")
-                st.pyplot(fig)
-
-                # --- PDF Download ---
-                st.subheader("📄 Download Corrected Essay & Summary")
-                pdf_file_name = "Essay_Evaluation_Report.pdf"
-                pdf = FPDF()
-                pdf.add_page()
-                if os.path.exists("NotoSans-Regular.ttf"):
-                    pdf.add_font('NotoSans', '', 'NotoSans-Regular.ttf', uni=True)
-                    pdf.set_font("NotoSans", "", 12)
-                else:
-                    pdf.set_font("Helvetica", "", 12)
-                pdf.multi_cell(0, 8, f"Original Essay:\n{essay_text}\n")
-                pdf.multi_cell(0, 8, f"Corrected Essay:\n{data['corrected_essay']}\n")
-                pdf.multi_cell(0, 8, f"Summary Analysis:\n{data.get('summary','No summary')}\n")
-                pdf.multi_cell(0, 8, f"Scores:\nGrammar: {data['grammar']}/10\nVocabulary: {data['vocabulary']}/10\nCoherence: {data['coherence']}/10\nStructure: {data['structure']}/10\nOverall: {overall}/10\n")
-                pdf_file_path = pdf_file_name
-                pdf.output(pdf_file_path)
-                with open(pdf_file_path, "rb") as f:
-                    st.download_button("⬇️ Download PDF", f, file_name=pdf_file_name)
-
-                # --- Word Document Option ---
-                doc_file_name = "Essay_Evaluation_Report.docx"
-                doc = Document()
-                doc.add_heading("AI Essay Evaluation Report", 0)
-                doc.add_heading("Original Essay", level=1)
-                doc.add_paragraph(essay_text)
-                doc.add_heading("Corrected Essay", level=1)
-                doc.add_paragraph(data['corrected_essay'])
-                doc.add_heading("Summary Analysis", level=1)
-                doc.add_paragraph(data.get('summary','No summary'))
-                doc.add_heading("Scores", level=1)
-                doc.add_paragraph(f"Grammar: {data['grammar']}/10\nVocabulary: {data['vocabulary']}/10\nCoherence: {data['coherence']}/10\nStructure: {data['structure']}/10\nOverall: {overall}/10")
-                doc.add_heading("Teaching Mode – Explanation", level=1)
-                doc.add_paragraph(data["explanations"])
-                doc.save(doc_file_name)
-                with open(doc_file_name, "rb") as f:
-                    st.download_button("⬇️ Download Word Doc", f, file_name=doc_file_name)
-
-                # --- AI Detection ---
-                if detect_ai:
-                    st.subheader("🤖 AI Detection")
-                    with st.spinner("Checking if essay is AI-generated..."):
-                        ai_prompt = f"""
-                        You are an AI text classifier. Evaluate if the following essay
-                        was written by a human or AI. Answer only as JSON:
-                        {{
-                            "ai_generated": "Yes" or "No",
-                            "confidence": 0-100
-                        }}
-                        Essay:
-                        {essay_text}
-                        """
-                        ai_response = client.chat.completions.create(
-                            model="gpt-4o-mini",
-                            messages=[{"role":"user","content": ai_prompt}]
-                        )
-                        result_text = ai_response.choices[0].message.content
-                        try:
-                            ai_data = json.loads(result_text)
-                            st.write(f"AI-generated: {ai_data['ai_generated']}")
-                            st.write(f"Confidence: {ai_data['confidence']}%")
-                        except:
-                            st.warning("Could not parse AI detection output. Showing raw result:")
-                            st.write(result_text)
-
-                st.success("✅ Analysis Complete! Thank you for using the checker!")
+            st.success("✅ Thank you for using the checker!")
