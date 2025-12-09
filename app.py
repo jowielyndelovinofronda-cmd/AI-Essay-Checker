@@ -1,6 +1,7 @@
 import streamlit as st
 from PIL import Image
 import easyocr
+import numpy as np
 from pdf2image import convert_from_bytes
 import PyPDF2
 from fpdf import FPDF
