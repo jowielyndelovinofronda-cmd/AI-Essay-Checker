@@ -7,139 +7,202 @@ from fpdf import FPDF
 from docx import Document
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
-import os
+import json
+import re
 
 # -----------------------------
-# Tesseract OCR setup
-# -----------------------------
-
-if os.path.exists(tesseract_path):
-    pytesseract.pytesseract.tesseract_cmd = tesseract_path
-    tesseract_available = True
-else:
-    tesseract_available = False
-
-# -----------------------------
-# Helper functions
+# Helper Functions
 # -----------------------------
 def ocr_image(img_file):
-    if tesseract_available:
-        try:
-            img = Image.open(img_file)
-            return pytesseract.image_to_string(img).strip()
-        except Exception as e:
-            return f"ERROR: {e}"
-    else:
-        return "Tesseract OCR not installed. Cannot scan image."
+    try:
+        img = Image.open(img_file)
+        return pytesseract.image_to_string(img).strip()
+    except Exception as e:
+        return f"ERROR: {e}"
 
 def ocr_pdf(pdf_file):
-    text = ""
     try:
         pdf_reader = PyPDF2.PdfReader(pdf_file)
+        text = ""
         for page in pdf_reader.pages:
             text += page.extract_text() + "\n"
-        if not text.strip() and tesseract_available:
-            pdf_file.seek(0)
+        if not text.strip():
             images = convert_from_bytes(pdf_file.read())
             for img in images:
                 text += pytesseract.image_to_string(img) + "\n"
+        return text.strip()
     except Exception as e:
-        text = f"ERROR: {e}"
-    return text.strip()
+        return f"ERROR: {e}"
+
+def sanitize_text(text):
+    # Replace unsupported characters for PDF if needed
+    return text.encode('latin1', errors='replace').decode('latin1')
+
+def extract_json_from_text(text):
+    try:
+        return json.loads(text)
+    except:
+        m = re.search(r"\{.*\}", text, re.DOTALL)
+        if m:
+            try:
+                return json.loads(m.group(0))
+            except:
+                pass
+    return None
 
 # -----------------------------
-# Streamlit config
+# Check if Tesseract OCR is installed
+# -----------------------------
+try:
+    pytesseract.get_tesseract_version()
+    tesseract_available = True
+except:
+    tesseract_available = False
+
+# -----------------------------
+# Streamlit App Config
 # -----------------------------
 st.set_page_config(page_title="AI Essay Checker", page_icon="📘", layout="wide")
-st.title("📘 Essay Checker & Scanner")
-st.write("Grammar • Spelling • Vocabulary • Coherence • Structure")
-st.write("---")
+
+st.markdown("""
+<style>
+.main-title { font-size:42px; font-weight:700; color:#003366; text-align:center; margin-bottom:-10px;}
+.subtitle { font-size:20px; color:#444; text-align:center; margin-bottom:30px;}
+.score-box { padding:15px; border-radius:10px; background:#eef2ff; text-align:center; font-size:22px; font-weight:600; margin:10px;}
+.corrected { background-color:#d4edda; padding:5px; border-radius:5px; }
+.summary { background-color:#fff3cd; padding:5px; border-radius:5px; }
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown('<div class="main-title">📘 AI Essay Evaluation System</div>', unsafe_allow_html=True)
+st.markdown('<div class="subtitle">Grammar • Spelling • Vocabulary • Coherence • Structure</div>', unsafe_allow_html=True)
+st.write("___")
 
 # -----------------------------
-# Input selection
+# Input Mode Selection
 # -----------------------------
-mode = st.radio("Choose Input Method:", ["📄 Paste Text", "📑 Upload PDF", "📷 Scan with Camera"])
+mode = st.radio("Choose Input Method:", ["📄 Paste Text", "📷 Upload Image", "📸 Camera Scan", "📑 Upload PDF / Scan"])
 essay_text = ""
 
 if mode == "📄 Paste Text":
-    essay_text = st.text_area("Paste or type your essay:", height=250)
+    st.subheader("📝 Enter Your Essay")
+    essay_text = st.text_area("Paste or type your essay below:", height=250)
 
-elif mode == "📑 Upload PDF":
-    uploaded_pdf = st.file_uploader("Upload PDF file", type=["pdf"])
+elif mode == "📷 Upload Image":
+    st.subheader("📷 Upload or Take a Photo of Your Essay")
+    uploaded_image = st.file_uploader("Upload image (PNG, JPG, JPEG)", type=["png","jpg","jpeg"])
+    if uploaded_image:
+        with st.spinner("Extracting text from image..."):
+            essay_text = ocr_image(uploaded_image)
+        st.subheader("📄 Extracted Text")
+        st.text_area("Extracted Essay Text", essay_text, height=200)
+
+elif mode == "📸 Camera Scan":
+    st.subheader("📸 Camera Input")
+    if not tesseract_available:
+        st.warning("⚠️ Tesseract OCR is not installed. Camera scanning is disabled.")
+    else:
+        camera_image = st.camera_input("Take a photo of your essay")
+        if camera_image:
+            with st.spinner("Extracting text from camera image..."):
+                essay_text = ocr_image(camera_image)
+            st.subheader("📄 Extracted Text")
+            st.text_area("Extracted Essay Text", essay_text, height=200)
+
+else:
+    st.subheader("📑 Upload PDF / Scanned Essay")
+    uploaded_pdf = st.file_uploader("Upload PDF", type=["pdf"])
     if uploaded_pdf:
         with st.spinner("Extracting text from PDF..."):
             essay_text = ocr_pdf(uploaded_pdf)
         st.subheader("📄 Extracted Text")
-        st.write(essay_text)
-
-elif mode == "📷 Scan with Camera":
-    if tesseract_available:
-        camera_image = st.camera_input("Take a photo of your essay")
-        if camera_image:
-            with st.spinner("Scanning image..."):
-                essay_text = ocr_image(camera_image)
-            st.subheader("📄 Extracted Text")
-            st.write(essay_text)
-    else:
-        st.warning("Tesseract OCR is not installed. Camera scanning is disabled.")
+        st.text_area("Extracted Essay Text", essay_text, height=200)
 
 # -----------------------------
-# Evaluate Button
+# Evaluate Button (Offline Dummy)
 # -----------------------------
 if st.button("🔍 Evaluate Essay"):
     if not essay_text.strip():
-        st.error("Please provide essay text.")
+        st.error("Please provide essay text via paste, image, camera, or PDF.")
     else:
-        # Fake evaluation (placeholder)
+        # Dummy evaluation (replace with AI if desired)
+        import random
+        data = {
+            "grammar": random.randint(5,10),
+            "vocabulary": random.randint(5,10),
+            "coherence": random.randint(5,10),
+            "structure": random.randint(5,10),
+            "corrected_essay": essay_text,  # for now just original text
+            "summary": "This is a summary analysis placeholder.",
+            "explanations": "Sentence-by-sentence explanations placeholder."
+        }
+
+        # --- Evaluation Scores ---
         st.subheader("📊 Evaluation Scores")
         col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Grammar", 8)
-        col2.metric("Vocabulary", 7)
-        col3.metric("Coherence", 8)
-        col4.metric("Structure", 9)
+        col1.markdown(f"<div class='score-box'>Grammar<br>{data['grammar']}/10</div>", unsafe_allow_html=True)
+        col2.markdown(f"<div class='score-box'>Vocabulary<br>{data['vocabulary']}/10</div>", unsafe_allow_html=True)
+        col3.markdown(f"<div class='score-box'>Coherence<br>{data['coherence']}/10</div>", unsafe_allow_html=True)
+        col4.markdown(f"<div class='score-box'>Structure<br>{data['structure']}/10</div>", unsafe_allow_html=True)
 
         st.write("---")
+
+        # --- Corrected Essay ---
         st.subheader("✔ Corrected Essay")
-        corrected_essay = essay_text  # No AI, just placeholder
-        st.write(corrected_essay)
+        st.markdown(f"<div class='corrected'>{data['corrected_essay']}</div>", unsafe_allow_html=True)
 
+        # --- Summary Analysis ---
         st.subheader("📑 Summary Analysis")
-        summary = "This is a placeholder summary."
-        st.write(summary)
+        st.markdown(f"<div class='summary'>{data.get('summary','No summary')}</div>", unsafe_allow_html=True)
 
-        st.subheader("☁️ Word Cloud")
+        # --- Teaching Mode ---
+        st.subheader("📘 Teaching Mode – Explanation")
+        st.write(data["explanations"])
+
+        # --- Overall Score ---
+        scores = [data['grammar'], data['vocabulary'], data['coherence'], data['structure']]
+        overall = sum(scores)/len(scores)
+        st.subheader("🏆 Overall Score")
+        st.metric("Overall Score (out of 10)", overall)
+
+        # --- Word Cloud ---
+        st.subheader("☁️ Essay Word Cloud")
         wordcloud = WordCloud(width=800, height=400, background_color='white').generate(essay_text)
         fig, ax = plt.subplots(figsize=(10,5))
         ax.imshow(wordcloud, interpolation='bilinear')
         ax.axis("off")
         st.pyplot(fig)
 
-        # -----------------------------
-        # PDF Download
-        # -----------------------------
-        pdf_file_name = "Essay_Report.pdf"
+        # --- PDF Download ---
+        st.subheader("📄 Download Corrected Essay & Summary")
+        pdf_file_name = "Essay_Evaluation_Report.pdf"
         pdf = FPDF()
         pdf.add_page()
-        pdf.set_font("Helvetica", "", 12)
-        pdf.multi_cell(0, 8, f"Original Essay:\n{essay_text}\n\nCorrected Essay:\n{corrected_essay}\n\nSummary:\n{summary}")
-        pdf.output(pdf_file_name)
-        with open(pdf_file_name, "rb") as f:
+        try:
+            pdf.add_font('NotoSans', '', 'NotoSans-Regular.ttf', uni=True)
+            pdf.set_font("NotoSans", "", 12)
+        except:
+            pdf.set_font("Helvetica", "", 12)
+        pdf.multi_cell(0, 8, f"Original Essay:\n{essay_text}\n")
+        pdf.multi_cell(0, 8, f"Corrected Essay:\n{data['corrected_essay']}\n")
+        pdf.multi_cell(0, 8, f"Summary Analysis:\n{data.get('summary','No summary')}\n")
+        pdf_file_path = pdf_file_name
+        pdf.output(pdf_file_path)
+        with open(pdf_file_path, "rb") as f:
             st.download_button("⬇️ Download PDF", f, file_name=pdf_file_name)
 
-        # -----------------------------
-        # Word Doc Download
-        # -----------------------------
-        doc_file_name = "Essay_Report.docx"
+        # --- Word Document Option ---
+        doc_file_name = "Essay_Evaluation_Report.docx"
         doc = Document()
-        doc.add_heading("Essay Report", 0)
+        doc.add_heading("AI Essay Evaluation Report", 0)
         doc.add_heading("Original Essay", level=1)
         doc.add_paragraph(essay_text)
         doc.add_heading("Corrected Essay", level=1)
-        doc.add_paragraph(corrected_essay)
-        doc.add_heading("Summary", level=1)
-        doc.add_paragraph(summary)
+        doc.add_paragraph(data['corrected_essay'])
+        doc.add_heading("Summary Analysis", level=1)
+        doc.add_paragraph(data.get('summary','No summary'))
         doc.save(doc_file_name)
         with open(doc_file_name, "rb") as f:
             st.download_button("⬇️ Download Word Doc", f, file_name=doc_file_name)
 
-        st.success("Thank you for using the checker!")
+        st.success("🙏 Thank you for using the checker!")
