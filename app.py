@@ -1,6 +1,6 @@
 import streamlit as st
 from PIL import Image
-import pytesseract
+import easyocr
 from pdf2image import convert_from_bytes
 import PyPDF2
 from fpdf import FPDF
@@ -10,7 +10,6 @@ from wordcloud import WordCloud
 import os
 import json
 import re
-import io  # Added for handling PDF bytes properly
 
 # -----------------------------
 # Helper Functions
@@ -27,26 +26,28 @@ def extract_json_from_text(text):
                 pass
     return None
 
+# Initialize EasyOCR once
+reader = easyocr.Reader(['en'], gpu=False)
+
 def ocr_image(img_file):
     try:
         img = Image.open(img_file)
-        return pytesseract.image_to_string(img).strip()
+        result = reader.readtext(img, detail=0)
+        return "\n".join(result).strip()
     except Exception as e:
         return f"ERROR: {e}"
 
 def ocr_pdf(pdf_file):
     try:
-        # Read the PDF bytes once to avoid stream issues
-        pdf_bytes = pdf_file.read()
-        pdf_reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
+        pdf_reader = PyPDF2.PdfReader(pdf_file)
         text = ""
         for page in pdf_reader.pages:
             text += page.extract_text() + "\n"
         if not text.strip():
-            # If no text extracted, perform OCR on images
-            images = convert_from_bytes(pdf_bytes)
+            images = convert_from_bytes(pdf_file.read())
             for img in images:
-                text += pytesseract.image_to_string(img) + "\n"
+                result = reader.readtext(img, detail=0)
+                text += "\n".join(result) + "\n"
         return text.strip()
     except Exception as e:
         return f"ERROR: {e}"
