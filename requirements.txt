@@ -1,10 +1,10 @@
 streamlit
-pillow
+easyocr
 pdf2image
 PyPDF2
 fpdf
 python-docx
 matplotlib
 wordcloud
-numpy
-easyocr
+Pillow
+
