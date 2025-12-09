@@ -1,6 +1,6 @@
 import streamlit as st
 from PIL import Image
-import easyocr
+import pytesseract
 from pdf2image import convert_from_bytes
 import PyPDF2
 from fpdf import FPDF
@@ -10,7 +10,6 @@ from wordcloud import WordCloud
 import os
 import json
 import re
-import io
 
 # -----------------------------
 # Helper Functions
@@ -27,16 +26,10 @@ def extract_json_from_text(text):
                 pass
     return None
 
-# -----------------------------
-# OCR with EasyOCR
-# -----------------------------
-reader = easyocr.Reader(['en'])  # Load once
-
 def ocr_image(img_file):
     try:
-        img = Image.open(img_file).convert('RGB')
-        result = reader.readtext(np.array(img), detail=0)
-        return "\n".join(result).strip()
+        img = Image.open(img_file)
+        return pytesseract.image_to_string(img).strip()
     except Exception as e:
         return f"ERROR: {e}"
 
@@ -49,8 +42,7 @@ def ocr_pdf(pdf_file):
         if not text.strip():
             images = convert_from_bytes(pdf_file.read())
             for img in images:
-                result = reader.readtext(np.array(img), detail=0)
-                text += "\n".join(result) + "\n"
+                text += pytesseract.image_to_string(img) + "\n"
         return text.strip()
     except Exception as e:
         return f"ERROR: {e}"
